@@ -8,6 +8,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
 import { useAppStore } from "../stores/appStore";
 import HoldMenu from "../components/HoldMenu";
 
@@ -26,6 +27,7 @@ export default function HomeScreen() {
     (x: number, y: number) => {
       menuPosition.value = { x, y };
       holdTimer.current = setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         showMenu();
       }, HOLD_DURATION);
     },
