@@ -3,15 +3,19 @@ import { useEffect } from "react";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
+  Easing,
   SharedValue,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const MENU_SIZE = 200;
+const MENU_WIDTH = 200;
+const MENU_HEIGHT = 200;
+const EDGE_PADDING = 20;
+const SAFE_TOP = 60;
+const SAFE_BOTTOM = 40;
 
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -37,29 +41,48 @@ export default function HoldMenu({ visible, position, onClose }: HoldMenuProps) 
 
   useEffect(() => {
     if (visible) {
-      scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-      opacity.value = withTiming(1, { duration: 150 });
+      scale.value = withTiming(1, {
+        duration: 150,
+        easing: Easing.out(Easing.cubic)
+      });
+      opacity.value = withTiming(1, { duration: 80 });
     } else {
-      scale.value = withTiming(0, { duration: 150 });
-      opacity.value = withTiming(0, { duration: 150 });
+      scale.value = withTiming(0, { duration: 80, easing: Easing.in(Easing.cubic) });
+      opacity.value = withTiming(0, { duration: 80 });
     }
   }, [visible, scale, opacity]);
 
   const containerStyle = useAnimatedStyle(() => {
-    const x = Math.min(
-      Math.max(position.value.x - MENU_SIZE / 2, 20),
-      SCREEN_WIDTH - MENU_SIZE - 20
-    );
-    const y = Math.min(
-      Math.max(position.value.y - MENU_SIZE / 2, 100),
-      SCREEN_HEIGHT - MENU_SIZE - 100
-    );
+    const touchX = position.value.x;
+    const touchY = position.value.y;
+
+    // Determine which side of touch point to place menu
+    const showLeft = touchX > SCREEN_WIDTH / 2;
+    const showAbove = touchY > SCREEN_HEIGHT / 2;
+
+    // Calculate menu position relative to touch point
+    let menuX = showLeft ? touchX - MENU_WIDTH - 10 : touchX + 10;
+    let menuY = showAbove ? touchY - MENU_HEIGHT - 10 : touchY + 10;
+
+    // Clamp to screen bounds
+    menuX = Math.max(EDGE_PADDING, Math.min(menuX, SCREEN_WIDTH - MENU_WIDTH - EDGE_PADDING));
+    menuY = Math.max(SAFE_TOP, Math.min(menuY, SCREEN_HEIGHT - MENU_HEIGHT - SAFE_BOTTOM));
+
+    // Transform origin - the corner closest to the touch point
+    const originX = showLeft ? MENU_WIDTH : 0;
+    const originY = showAbove ? MENU_HEIGHT : 0;
 
     return {
-      transform: [{ scale: scale.value }],
+      transform: [
+        { translateX: originX },
+        { translateY: originY },
+        { scale: scale.value },
+        { translateX: -originX },
+        { translateY: -originY },
+      ],
       opacity: opacity.value,
-      left: x,
-      top: y,
+      left: menuX,
+      top: menuY,
     };
   });
 
