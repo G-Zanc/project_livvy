@@ -1,10 +1,13 @@
-import { View, Dimensions, ScrollView, KeyboardAvoidingView, Platform, Pressable, Text } from "react-native";
+import { View, Dimensions, Pressable, Text } from "react-native";
 import { useEffect, useCallback, useRef } from "react";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  useAnimatedScrollHandler,
+  useAnimatedRef,
 } from "react-native-reanimated";
+import { useKeyboardHandler } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -53,11 +56,25 @@ const INPUT_CONTAINER_HEIGHT = 140;
 
 export default function ChatSheet() {
   const { chatVisible, closeChat, messages, isProcessing, addMessage, setProcessing } = useAppStore();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useAnimatedRef<Animated.ScrollView>();
   const chatInputRef = useRef<ChatInputRef>(null);
   const insets = useSafeAreaInsets();
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
+  const keyboardHeight = useSharedValue(0);
+  const scrollPosition = useSharedValue(0);
+
+  // Hook into native keyboard animation for fluid movement
+  useKeyboardHandler({
+    onMove: (e) => {
+      "worklet";
+      keyboardHeight.value = e.height;
+    },
+    onEnd: (e) => {
+      "worklet";
+      keyboardHeight.value = e.height;
+    },
+  });
 
   // Use example messages if no messages exist
   const displayMessages = messages.length > 0 ? messages : EXAMPLE_MESSAGES;
@@ -84,6 +101,23 @@ export default function ChatSheet() {
     transform: [{ translateY: translateY.value }],
   }));
 
+  // Animated style for the input container - moves up with keyboard
+  const inputContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -keyboardHeight.value }],
+  }));
+
+  // Animated style for the scroll view content padding
+  const scrollViewStyle = useAnimatedStyle(() => ({
+    paddingBottom: INPUT_CONTAINER_HEIGHT + insets.bottom + keyboardHeight.value,
+  }));
+
+  // Scroll handler to track position
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollPosition.value = event.contentOffset.y;
+    },
+  });
+
   const handleSendMessage = useCallback((content: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -92,10 +126,6 @@ export default function ChatSheet() {
       timestamp: Date.now(),
     };
     addMessage(userMessage);
-
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
 
     // Simulate AI response
     setProcessing(true);
@@ -108,10 +138,6 @@ export default function ChatSheet() {
       };
       addMessage(assistantMessage);
       setProcessing(false);
-
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
     }, 1500);
   }, [addMessage, setProcessing]);
 
@@ -173,24 +199,25 @@ export default function ChatSheet() {
       </View>
 
       {/* Messages */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={0}
-      >
-        <View style={{ flex: 1 }}>
-          <ScrollView
-            ref={scrollViewRef}
-            style={{ flex: 1, backgroundColor: "#fafafa" }}
-            contentContainerStyle={{
-              paddingTop: 16,
-              paddingBottom: INPUT_CONTAINER_HEIGHT + insets.bottom,
-            }}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => {
-              scrollViewRef.current?.scrollToEnd({ animated: false });
-            }}
-          >
+      <View style={{ flex: 1 }}>
+        <Animated.ScrollView
+          ref={scrollViewRef}
+          style={{ flex: 1, backgroundColor: "#fafafa" }}
+          contentContainerStyle={{
+            paddingTop: 16,
+            paddingBottom: INPUT_CONTAINER_HEIGHT + insets.bottom,
+          }}
+          showsVerticalScrollIndicator={false}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            // Auto-scroll to bottom when content changes
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View style={scrollViewStyle}>
             {displayMessages.map((message, index) => (
               <MessageBubble
                 key={message.id}
@@ -199,38 +226,44 @@ export default function ChatSheet() {
               />
             ))}
             {isProcessing && <ThinkingIndicator />}
-          </ScrollView>
+          </Animated.View>
+        </Animated.ScrollView>
 
-          {/* Translucent area below input */}
-          <View
-            style={{
+        {/* Translucent area below input - animates with keyboard */}
+        <Animated.View
+          style={[
+            {
               position: "absolute",
               bottom: 0,
               left: 0,
               right: 0,
               height: insets.bottom + 30,
-              backgroundColor: "rgba(250, 250, 250, 0.85)",
-            }}
-          />
+              backgroundColor: "rgba(250, 250, 250, 0.95)",
+            },
+            inputContainerStyle,
+          ]}
+        />
 
-          {/* Floating Input */}
-          <View
-            style={{
+        {/* Floating Input - animates with keyboard */}
+        <Animated.View
+          style={[
+            {
               position: "absolute",
               bottom: insets.bottom,
               left: 0,
               right: 0,
-            }}
-            pointerEvents="box-none"
-          >
-            <ChatInput
-              ref={chatInputRef}
-              onSend={handleSendMessage}
-              disabled={isProcessing}
-            />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+            },
+            inputContainerStyle,
+          ]}
+          pointerEvents="box-none"
+        >
+          <ChatInput
+            ref={chatInputRef}
+            onSend={handleSendMessage}
+            disabled={isProcessing}
+          />
+        </Animated.View>
+      </View>
     </Animated.View>
   );
 }
