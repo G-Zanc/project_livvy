@@ -11,11 +11,12 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useAppStore } from "../stores/appStore";
 import HoldMenu, { calculateSelectedIndex, calculateAdjustedPositions, getSelectedRoute } from "../components/HoldMenu";
+import { ChatSheet } from "../components/chat";
 
 const HOLD_DURATION = 400;
 
 export default function HomeScreen() {
-  const { menuVisible, showMenu, hideMenu } = useAppStore();
+  const { menuVisible, showMenu, hideMenu, openChat } = useAppStore();
   const adjustedPositionsRef = useRef<{ x: number; y: number }[]>([]);
 
   const originPosition = useSharedValue({ x: 0, y: 0 });
@@ -57,12 +58,17 @@ export default function HomeScreen() {
       triggerSelectionHaptic();
       closeMenu();
       setTimeout(() => {
-        router.push(route as any);
+        // Open chat overlay instead of navigating to /chat
+        if (route === "/chat") {
+          openChat();
+        } else {
+          router.push(route as any);
+        }
       }, 100);
     } else {
       closeMenu();
     }
-  }, [closeMenu, triggerSelectionHaptic]);
+  }, [closeMenu, triggerSelectionHaptic, openChat]);
 
   const calculateAndStorePositions = useCallback((originX: number, originY: number) => {
     const { width, height } = Dimensions.get("window");
@@ -123,6 +129,8 @@ export default function HomeScreen() {
         fingerPosition={fingerPosition}
         selectedIndex={selectedIndex}
       />
+
+      <ChatSheet />
     </View>
   );
 }
